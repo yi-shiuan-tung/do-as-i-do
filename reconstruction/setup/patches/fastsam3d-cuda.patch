@@ -1,0 +1,13 @@
+diff --git a/notebook/inference.py b/notebook/inference.py
+index d2e16c0..c5a50ab 100644
+--- a/notebook/inference.py
++++ b/notebook/inference.py
+@@ -2,7 +2,7 @@
+ import os
+ import sys
+ # not ideal to put that here
+-os.environ["CUDA_HOME"] = os.environ["CONDA_PREFIX"]
++os.environ.setdefault("CUDA_HOME", os.environ["CONDA_PREFIX"])
+ os.environ["LIDRA_SKIP_INIT"] = "true"
+ 
+ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

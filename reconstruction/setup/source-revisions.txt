@@ -1,0 +1,9 @@
+do-as-i-do 824591b808c342b20079c3b4198a8c2bdf88c74e
+ 823d4784dbf73a9a58ca8b2384dee1eaf8fc1c6b reconstruction/modules/Fast-SAM3D (heads/main)
+ 2c3fa0c06e54a1b192c1ff692eaa89d526cd6317 reconstruction/modules/HaWoR (heads/main)
+ 24e0c2a125d2b37b35719124d1f758777c150ca8 reconstruction/modules/HaWoR/thirdparty/DROID-SLAM/thirdparty/eigen (before-3.4-1236-g24e0c2a12)
+ 0fa9ce8ffca86d985eca9e189a99690d6f3d4df6 reconstruction/modules/HaWoR/thirdparty/DROID-SLAM/thirdparty/lietorch (0fa9ce8)
+ 824272cde8ca2541e8b67b0887f5ded92b128d1f reconstruction/modules/HaWoR/thirdparty/DROID-SLAM/thirdparty/lietorch/eigen (before-git-migration-571-g824272cde)
+ 875b010016f4c86936985b74ffcd7230e6979d02 reconstruction/modules/sam-3d-objects (heads/main)
+ b8e18f5f021fb27c4f6eeb1a8f4ecfa3fa0bec39 reconstruction/modules/sam3 (heads/main)
+ f2f8888a803051ea42cd79c89cfca6c25dfeae77 reconstruction/modules/tapnet (heads/main)

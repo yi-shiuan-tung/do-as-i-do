@@ -24,31 +24,32 @@ reconstruction/
 - SAM 3 segmentation is implemented with a click-based GUI needing an X display
   (`config/paths.sh` sets `SAM3_DISPLAY=:1`; on a headless host, use forwarding or try text based prompting).
 
-## Setup (one time)
+## Setup (B200 node)
+
+Use the restartable installer with the CUDA 12.8 stack used on this node:
 
 ```bash
-GIT_LFS_SKIP_SMUDGE=1 git clone --recurse-submodules https://github.com/malik-group/do-as-i-do.git
-cd do-as-i-do/reconstruction
-./setup/00_init_submodules.sh                 # only needed if you didn't clone with recursive submodules
-./setup/01_create_envs.sh                     # FALLBACK build of all 4 envs (sam3, sam3d, hawor, tapnet) — prefer each fork's own setup, see "Setting up the conda envs" below
-./setup/02_fetch_weights.sh --download        # fetch weights (needs hf auth)
+bash setup/install_b200.sh --plan
+MANO_DIR=/path/to/licensed/mano/models bash setup/install_b200.sh
 ```
-**Setting up the conda envs.** The recommended route is to build each env by following
-its fork's own setup instructions (the repos vendored under `modules/`):
 
-- `sam3`  → [malik-group/sam3](https://github.com/malik-group/sam3) (`modules/sam3`)
-- `sam3d` → [malik-group/sam-3d-objects](https://github.com/malik-group/sam-3d-objects) (`modules/sam-3d-objects`, see its `doc/setup.md`) 
-- `hawor` → [malik-group/HaWoR](https://github.com/malik-group/HaWoR) (`modules/HaWoR`)
-- `tapnet` → [malik-group/tapnet](https://github.com/malik-group/tapnet) (`modules/tapnet`)
+Conda, a working NVIDIA driver, approved Hugging Face access to SAM3/SAM3D,
+and your licensed MANO files are prerequisites. See [the restoration guide](setup/README.md)
+for backup instructions before a node refresh, authentication, storage requirements,
+and stage-by-stage recovery. Preserve the local installer files before refreshing;
+they are not yet in the public repository.
 
-See [`env/README.md`](env/README.md) for the per-env cu128 recipes (or `./setup/01_create_envs.sh` to script them).
+```bash
+bash setup/install_b200.sh --from hawor  # resume a failed installation
+bash setup/install_b200.sh --only verify
+```
 
-After the `sam3d` env is built, two manual Stage-2 steps are needed: un-shadow the repo's
-`notebook/` package (`pip uninstall -y notebook`) and build the Mip-Splatting
-`diff_gaussian_rasterization` for the renderer's `inria` backend. Commands in
-[`env/README.md`](env/README.md).
+This installs all four reconstruction environments, builds the CUDA extensions,
+applies compatibility patches, and fetches model weights. Avoid the upstream
+CUDA 11.7/12.1 recipes on B200. The old `01_create_envs.sh` now delegates to this
+installer; `02_fetch_weights.sh` remains a legacy local-copy helper.
 
-Review `config/paths.sh`.
+Review `config/paths.sh` before running videos.
 
 
 ## Run

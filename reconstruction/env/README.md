@@ -1,54 +1,33 @@
-# Conda environments
+# Reconstruction environments on B200
 
-The pipeline switches between **4 conda envs** (names set in `config/paths.sh`).
-
-**Recommended:** build each env by following its fork's own setup instructions —
-[`malik-group/sam3`](https://github.com/malik-group/sam3) (`sam3`),
-[`malik-group/sam-3d-objects`](https://github.com/malik-group/sam-3d-objects) (`sam3d`),
-[`malik-group/HaWoR`](https://github.com/malik-group/HaWoR) (`hawor`),
-[`malik-group/tapnet`](https://github.com/malik-group/tapnet) (`tapnet`).
-
-The two options below are **fallbacks** (e.g. on Blackwell / RTX 50xx, where the forks' cu117/cu121 pins won't run):
-
-- **Build fresh** — `./setup/01_create_envs.sh` (or one at a time: `./setup/01_create_envs.sh sam3|sam3d|hawor|tapnet`). Builds each env from the upstream repos' own dependency files + the recipes in the script. 
-- **From the exact pins here** — the `env/*.yml` files are full `conda env export`s of known-working envs, to be treated mainly as a version reference for manual installation.
-
-After the `sam3d` env is set up — whether via your own steps or the commands above —
-run this once to un-shadow the repo's `notebook/` package:
-```bash
-pip uninstall -y notebook   # ensure `notebook.inference` imports cleanly
-```
-
-The `sam3d` env also needs GeoCalib for the gravity-estimation step
-(`scripts/predict_video_gravity.py`; installed automatically by `01_create_envs.sh`):
-```bash
-pip install "geocalib @ git+https://github.com/cvg/GeoCalib.git"
-```
-Note: `env/sam3d.yml` predates this addition — if installing from the exact pins, add geocalib on top.
-
-If SAM 3D inference crashes during GLB/texture baking with `NameError: name 'GaussianRasterizationSettings' is not defined` try below:
+Use [`../setup/install_b200.sh`](../setup/install_b200.sh) for a fresh node.
+The [restoration guide](../setup/README.md) covers prerequisites, backups,
+weights, verification, and resuming individual installation stages.
 
 ```bash
-conda activate sam3d
-git clone --recursive https://github.com/autonomousvision/mip-splatting.git
-cd mip-splatting/submodules/diff-gaussian-rasterization
-CUDA_HOME=$CONDA_PREFIX TORCH_CUDA_ARCH_LIST=12.0 FORCE_CUDA=1 python setup.py install
+bash setup/install_b200.sh
+# Or resume after a failure:
+bash setup/install_b200.sh --from sam3d
 ```
 
-If building HaWoR's DROID-SLAM / lietorch fails to compile with
-`error: cannot convert 'const at::DeprecatedTypeProperties' to 'c10::ScalarType'` in lietorch's `dispatch.h`,
-edit `modules/HaWoR/thirdparty/DROID-SLAM/thirdparty/lietorch/lietorch/include/dispatch.h` and rebuild
-(`cd modules/HaWoR/thirdparty/DROID-SLAM && python setup.py install`):
-```diff
--    at::ScalarType _st = ::detail::scalar_type(the_type);
-+    at::ScalarType _st = the_type.scalarType();
-```
+| Default environment | Python | Torch / torchvision |
+|---|---|---|
+| sam3 | 3.12 | 2.8.0+cu128 / 0.23.0+cu128 |
+| sam3d-objects | 3.11 | 2.8.0+cu128 / 0.23.0+cu128 |
+| hawor | 3.10 | 2.9.0+cu128 / 0.24.0+cu128 |
+| tapnet | 3.10 | 2.7.0+cu128 / 0.22.0+cu128 |
 
-| env (default name) | exact-pin YAML | stages | deps from |
-|---|---|---|---|
-| `sam3`   | `env/sam3.yml`   | 1 — SAM3 segmentation        | `env/sam3.yml` (or refer to original repository) |
-| `sam3d`  | `env/sam3d.yml`  | 2, 3, 4 — meshes, pose, opt  | `modules/sam-3d-objects/environments/default.yml` + `requirements*.txt` |
-| `hawor`  | `env/hawor.yml`  | 2 — hand reconstruction      | `modules/HaWoR/requirements.txt` (+ torch cu117) |
-| `tapnet` | `env/tapnet.yml` | 2.5 — velocity tracking      | `modules/tapnet[torch]` (Python 3.10, torch 2.7 cu128) |
+The separate `cuda128-toolkit` prefix supplies nvcc 12.8. Do not install a
+CUDA 13.x compiler into these Python environments. B200 uses architecture 10.0.
 
+- `*-cu128-resolved.txt`: package constraints captured from the current node.
+- `*-cu128-inference.txt`: inference packages to install.
+- `*-cu128-sources.txt`: source-built dependencies with pinned Git revisions.
+- `*-cu128-constraints.txt`: essential compatibility pins.
+- `requirements.reconstruction-*.txt`: SAM3D package metadata restored by the installer.
+- `*.yml`: historical exports for reference; they are not the fresh-node recipe.
 
+The completion helpers `03_complete_sam3d_cu128.sh` and
+`04_complete_hawor_cu128.sh` are invoked by the installer after the required
+Python/Torch/toolkit setup. They are not standalone fresh-environment installers.
+SAM3D uses SDPA attention and shares its environment with Fast-SAM3D.

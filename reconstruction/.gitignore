@@ -19,3 +19,6 @@ modules/sam3/output/
 # OS / editor
 .DS_Store
 *.swp
+
+# Installer logs (may include local paths)
+.setup-logs/

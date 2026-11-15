@@ -1,0 +1,39 @@
+diff --git a/notebook/inference.py b/notebook/inference.py
+index 1dbd74b..04e75db 100644
+--- a/notebook/inference.py
++++ b/notebook/inference.py
+@@ -2,7 +2,7 @@
+ import os
+ 
+ # not ideal to put that here
+-os.environ["CUDA_HOME"] = os.environ["CONDA_PREFIX"]
++os.environ.setdefault("CUDA_HOME", os.environ["CONDA_PREFIX"])
+ os.environ["LIDRA_SKIP_INIT"] = "true"
+ 
+ import sys
+diff --git a/pyproject.toml b/pyproject.toml
+index f942102..6c4e81d 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -3,7 +3,7 @@ requires = ["hatchling", "hatch-requirements-txt"]
+ build-backend = "hatchling.build"
+ 
+ [tool.hatch.envs.default.env-vars]
+-PIP_EXTRA_INDEX_URL = "https://pypi.ngc.nvidia.com https://download.pytorch.org/whl/cu121"
++PIP_EXTRA_INDEX_URL = "https://pypi.ngc.nvidia.com https://download.pytorch.org/whl/cu128"
+ 
+ [tool.hatch.metadata]
+ # for git-referenced dependencies
+@@ -22,9 +22,9 @@ exclude = ["conftest.py", "*_test.py"]
+ packages = ["sam3d_objects"]
+ 
+ [tool.hatch.metadata.hooks.requirements_txt]
+-files = ["requirements.txt"]
++files = ["requirements.reconstruction-cu128.txt"]
+ 
+ [tool.hatch.metadata.hooks.requirements_txt.optional-dependencies]
+-p3d = ["requirements.p3d.txt"]
+-inference = ["requirements.inference.txt"]
++p3d = ["requirements.reconstruction-p3d.txt"]
++inference = ["requirements.reconstruction-inference.txt"]
+ dev = ["requirements.dev.txt"]

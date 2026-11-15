@@ -1,0 +1,6 @@
+# Protect the tested B200 stack while resolving inference dependencies.
+torch==2.8.0+cu128
+torchvision==0.23.0+cu128
+torchaudio==2.8.0+cu128
+numpy==1.26.4
+pytorch3d==0.7.8

@@ -1,0 +1,56 @@
+diff --git a/scripts/scripts_test_video/hawor_video.py b/scripts/scripts_test_video/hawor_video.py
+index ca4394d..fee0f42 100644
+--- a/scripts/scripts_test_video/hawor_video.py
++++ b/scripts/scripts_test_video/hawor_video.py
+@@ -34,7 +34,16 @@ def load_hawor(checkpoint_path):
+         model_cfg.MODEL.BBOX_SHAPE = [192,256]
+         model_cfg.freeze()
+ 
+-    model = HAWOR.load_from_checkpoint(checkpoint_path, strict=False, cfg=model_cfg)
++    # The checkpoint embeds OmegaConf metadata. Keep PyTorch's restricted loader
++    # and allow only these configuration types for this one load operation.
++    from typing import Any
++    from omegaconf import DictConfig, ListConfig
++    from omegaconf.base import Metadata, ContainerMetadata
++    from omegaconf.nodes import AnyNode
++    config_types = [DictConfig, ListConfig, Metadata, ContainerMetadata,
++                    AnyNode, dict, list, int, Any, defaultdict]
++    with torch.serialization.safe_globals(config_types):
++        model = HAWOR.load_from_checkpoint(checkpoint_path, strict=False, cfg=model_cfg)
+     return model, model_cfg
+ 
+ 
+diff --git a/thirdparty/DROID-SLAM/setup.py b/thirdparty/DROID-SLAM/setup.py
+index fa45087..47e2fb3 100644
+--- a/thirdparty/DROID-SLAM/setup.py
++++ b/thirdparty/DROID-SLAM/setup.py
+@@ -18,11 +18,11 @@ setup(
+             extra_compile_args={
+                 'cxx': ['-O3'],
+                 'nvcc': ['-O3',
+-                    # RTX 5090 (Blackwell, sm_120)
+-                    '-gencode=arch=compute_120,code=sm_120',
++                    # B200 (Blackwell, sm_100)
++                    '-gencode=arch=compute_100,code=sm_100',
+ 
+                     # PTX fallback (CRITICAL for future GPUs)
+-                    '-gencode=arch=compute_120,code=compute_120',
++                    '-gencode=arch=compute_100,code=compute_100',
+                 ]
+             }),
+     ],
+@@ -47,11 +47,11 @@ setup(
+             extra_compile_args={
+                 'cxx': ['-O2'],
+                 'nvcc': ['-O2',
+-                    # RTX 5090 (Blackwell, sm_120)
+-                    '-gencode=arch=compute_120,code=sm_120',
++                    # B200 (Blackwell, sm_100)
++                    '-gencode=arch=compute_100,code=sm_100',
+ 
+                     # PTX fallback (CRITICAL for future GPUs)
+-                    '-gencode=arch=compute_120,code=compute_120',
++                    '-gencode=arch=compute_100,code=compute_100',
+                 ]
+             }),
+     ],

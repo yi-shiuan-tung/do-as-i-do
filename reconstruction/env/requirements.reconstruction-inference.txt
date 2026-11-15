@@ -1,0 +1,4 @@
+kaolin==0.18.0
+gsplat==1.5.3
+seaborn==0.13.2
+gradio==5.49.0
