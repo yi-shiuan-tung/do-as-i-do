@@ -262,6 +262,18 @@ def compute_optimal_scale(c_rot, t_cam, target_3d):
     return s
 
 
+def initialize_calibrated_output(layout_data, frames):
+    """Persist the working scale even when a frame later fails local fitting."""
+    output = copy.deepcopy(layout_data)
+    for frame in frames:
+        pose = output['objects'][frame['obj_index']]['local_to_scene']
+        pose['translation_camera_frame'] = frame['t_cam'].tolist()
+        pose['translation_scale_optimized'] = 1.0
+        pose['translation_optimization_status'] = 'skipped'
+        pose['translation_optimization_reason'] = 'not_processed'
+    return output
+
+
 def main():
     args = parse_args()
 
@@ -375,7 +387,7 @@ def main():
 
     # Process each frame
     print(f"\nOptimizing translation_scale per frame (mesh_scale={mesh_scale:.6f})...")
-    output_data = copy.deepcopy(layout_data)
+    output_data = initialize_calibrated_output(layout_data, frames)
     per_frame_scales = []
     skipped = 0
 
@@ -383,10 +395,12 @@ def main():
         fidx = fr["frame_idx"]
         rot_matrix = get_rot_matrix(fr["quat_wxyz_cam"])
         t_cam = fr["t_cam"]
+        output_pose = output_data['objects'][fr['obj_index']]['local_to_scene']
 
         # Load pointmap and intrinsics
         pointmap, intrinsics = load_pointmap_and_intrinsics(args.pointmap_dir, fidx)
         if pointmap is None:
+            output_pose['translation_optimization_reason'] = 'missing_pointmap_or_intrinsics'
             print(f"  frame {fidx:3d}: pointmap/intrinsics not found, skipping")
             skipped += 1
             continue
@@ -394,6 +408,7 @@ def main():
         # Load object mask
         mask = load_mask(args.mask_dir, fidx, args.mask_name)
         if mask is None:
+            output_pose['translation_optimization_reason'] = 'missing_object_mask'
             print(f"  frame {fidx:3d}: mask not found, skipping")
             skipped += 1
             continue
@@ -406,6 +421,7 @@ def main():
 
         n_pixels = mask.sum()
         if n_pixels < args.min_mask_pixels: # TODO: handle this case better
+            output_pose['translation_optimization_reason'] = 'object_mask_too_small'
             print(f"  frame {fidx:3d}: mask too small ({n_pixels} px), skipping")
             skipped += 1
             continue
@@ -431,6 +447,7 @@ def main():
         hand_mask_name = f"{anchor}_hand_0"
         hand_mask = load_mask(args.mask_dir, fidx, hand_mask_name)
         if hand_mask is None:
+            output_pose['translation_optimization_reason'] = 'missing_hand_mask'
             print(f"  frame {fidx:3d}: hand mask missing, skipping (frame keeps ref-scaled translation)")
             skipped += 1
             continue
@@ -447,6 +464,7 @@ def main():
             max_rays=MAX_HAND_RAYS, rng=rng,
         )
         if len(hand_hits) < 10:
+            output_pose['translation_optimization_reason'] = 'too_few_hand_hits'
             print(f"  frame {fidx:3d}: too few hand raycast hits ({len(hand_hits)}), skipping")
             skipped += 1
             continue
@@ -458,6 +476,7 @@ def main():
 
         # Pointmap-to-real scale factor (from hand depth comparison)
         if abs(h_pm[2]) < 1e-6:
+            output_pose['translation_optimization_reason'] = 'near_zero_hand_depth'
             print(f"  frame {fidx:3d}: hand pointmap depth ~0, skipping")
             skipped += 1
             continue
@@ -472,6 +491,7 @@ def main():
         mesh_u, mesh_v = project_to_pixels(verts_with_t, fx, fy, cx, cy, pm_w, pm_h)
         mesh_in_mask = mask[mesh_v, mesh_u]
         if mesh_in_mask.sum() < 10:
+            output_pose['translation_optimization_reason'] = 'too_few_object_vertices_in_mask'
             print(f"  frame {fidx:3d}: too few mesh pixels in object mask ({mesh_in_mask.sum()}), skipping")
             skipped += 1
             continue
@@ -572,6 +592,8 @@ def main():
         optimized_t = (t_cam * opt_scale).tolist()
         obj["local_to_scene"]["translation_camera_frame"] = optimized_t
         obj["local_to_scene"]["translation_scale_optimized"] = float(opt_scale)
+        obj["local_to_scene"]["translation_optimization_status"] = 'optimized'
+        obj["local_to_scene"]["translation_optimization_reason"] = None
 
         per_frame_scales.append({
             "frame_idx": fidx,

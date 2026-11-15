@@ -10,11 +10,21 @@
 #   4  optimize translation/scale (+ optional viser viz)                     [sam3d]
 #
 # Usage:  ./run_pipeline.sh VIDEO_PATH [FRAME_N] [OBJECT] [ANCHOR_HAND]
+# Resume final optimization: START_STAGE=4 ./run_pipeline.sh VIDEO_PATH FRAME_N OBJECT ANCHOR_HAND
+# Resume after hand reconstruction: START_STAGE=pointmaps ./run_pipeline.sh VIDEO_PATH FRAME_N OBJECT ANCHOR_HAND
+# Resume at hand reconstruction: START_STAGE=hawor ./run_pipeline.sh VIDEO_PATH FRAME_N OBJECT ANCHOR_HAND
+# Resume after segmentation: START_STAGE=2 ./run_pipeline.sh VIDEO_PATH FRAME_N OBJECT ANCHOR_HAND
 # Example: ./run_pipeline.sh /data/pickplan_pan/pickplan_pan.mp4 28 pan right
 set -eo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/config/paths.sh"
+
+START_STAGE="${START_STAGE:-0}"
+case "$START_STAGE" in
+    0|2|hawor|pointmaps|4) ;;
+    *) echo "START_STAGE must be 0 (full run), 2 (reuse segmentation), hawor (reuse meshes and reference pointmap), pointmaps (reuse completed hand reconstruction), or 4 (final optimization only)." >&2; exit 1 ;;
+esac
 
 # ──────────────────────────── Per-run inputs (args) ────────────────────────────
 VIDEO_PATH="${1:?usage: run_pipeline.sh VIDEO_PATH [FRAME_N] [OBJECT] [ANCHOR_HAND]}"
@@ -40,6 +50,7 @@ HAND_MESHES_PATH="$VIDEO_DIR/$VIDEO_NAME/all_hand_meshes.npz"
 
 source "$(conda info --base)/etc/profile.d/conda.sh"
 
+if [ "$START_STAGE" = 0 ]; then
 # Frame extraction (Steps 0 & 1) uses ffmpeg from the sam3 env — activate it FIRST so
 # no system/base ffmpeg is required and the pipeline runs directly on a clip.
 conda activate "$ENV_SAM3"
@@ -85,7 +96,46 @@ python run_sam3_video.py \
     --obj_id "$HAND_ID" \
     --frame_idx "$n"
 
+else
+    # Stage 2 relies on the reference image, extracted frames, and segmentation masks.
+    [ -s "$FRAME_PATH" ] || { echo "Missing reference image: $FRAME_PATH" >&2; exit 1; }
+    [ -d "$VIDEO_DIR/all_frames" ] || { echo "Missing extracted frames: $VIDEO_DIR/all_frames" >&2; exit 1; }
+    for OBJ_NAME in "${OBJECT_NAMES[@]}"; do
+        OBJ_ID="${OBJ_NAME// /_}"
+        [ -s "$MASKS_DIR/$OBJ_ID.png" ] || { echo "Missing object mask: $MASKS_DIR/$OBJ_ID.png" >&2; exit 1; }
+    done
+    [ -s "$MASKS_DIR/${ANCHOR_HAND}_hand_0.png" ] || { echo "Missing anchor-hand mask in $MASKS_DIR" >&2; exit 1; }
+    if [ "$START_STAGE" = hawor ] || [ "$START_STAGE" = pointmaps ]; then
+        for artifact in "$POINTMAP_PATH" "$INTRINSICS_PATH"; do
+            [ -s "$artifact" ] || { echo "Missing reference artifact: $artifact" >&2; exit 1; }
+        done
+        for OBJ_NAME in "${OBJECT_NAMES[@]}"; do
+            OBJ_ID="${OBJ_NAME// /_}"
+            [ -s "$MASKS_DIR/$OBJ_ID/$OBJ_ID.obj" ] || { echo "Missing mesh for $OBJ_ID in $MASKS_DIR" >&2; exit 1; }
+        done
+        if [ "$START_STAGE" = pointmaps ]; then
+            [ -s "$HAND_MESHES_PATH" ] || { echo "Missing hand meshes: $HAND_MESHES_PATH" >&2; exit 1; }
+            echo "=== Resuming at per-frame pointmaps using completed hand reconstruction ==="
+        else
+            echo "=== Resuming at HaWoR using existing meshes and reference pointmap ==="
+        fi
+    elif [ "$START_STAGE" = 4 ]; then
+        [ -s "$HAND_MESHES_PATH" ] || { echo "Missing hand meshes: $HAND_MESHES_PATH" >&2; exit 1; }
+        for OBJ_NAME in "${OBJECT_NAMES[@]}"; do
+            OBJ_ID="${OBJ_NAME// /_}"
+            for artifact in "$MASKS_DIR/$OBJ_ID/$OBJ_ID.obj" "$VIDEO_DIR/obj_tracking_out/$OBJ_ID/combined_visualization/layout_camera_frame.json"; do
+                [ -s "$artifact" ] || { echo "Missing optimization input: $artifact" >&2; exit 1; }
+            done
+        done
+        echo "=== Resuming at final translation/scale optimization ==="
+    else
+        echo "=== Resuming at Stage 2 using existing frames and masks ==="
+    fi
+fi
+
 # ──────────────── Step 2: 3D reconstruction, pointmaps, HaWoR ────────
+if [ "$START_STAGE" != 4 ]; then
+if [ "$START_STAGE" != hawor ] && [ "$START_STAGE" != pointmaps ]; then
 echo "=== Running batch masks to meshes ==="
 conda activate "$ENV_SAM3D"
 cd "$SAM3D_DIR"                                  # overlay: generate_mesh_sam3d.py
@@ -97,11 +147,15 @@ cd "$SCRIPTS_DIR"
 echo "=== Computing pointmap for reference frame ==="
 python get_pointmap_dir.py --image "$FRAME_PATH" --output "$POINTMAP_PATH"
 
+fi
+
+if [ "$START_STAGE" != pointmaps ]; then
 echo "=== Running HaWoR ==="
 conda activate "$ENV_HAWOR"
 cd "$HAWOR_DIR"                                  # patched: demo.py
 IMG_FOCAL=$(head -n 1 "$INTRINSICS_PATH")
 python demo.py --video_path "$VIDEO_PATH" --vis_mode cam --img_focal "$IMG_FOCAL" --static_camera
+fi
 
 echo "=== Computing pointmaps for all frames ==="
 cd "$SCRIPTS_DIR"
@@ -173,6 +227,8 @@ for OBJ_NAME in "${OBJECT_NAMES[@]}"; do
     cd "$FASTSAM3D_DIR"
 done
 
+fi
+
 # ──────────────── Step 4: Optimize translation/scale & visualize ──────
 cd "$SCRIPTS_DIR"
 conda activate "$ENV_SAM3D"
@@ -186,6 +242,7 @@ for OBJ_NAME in "${OBJECT_NAMES[@]}"; do
     python optimize_translation_scale.py \
         --video-dir "$VIDEO_DIR" \
         --layout-json "$LAYOUT_JSON_CF" \
+        --hand-meshes "$HAND_MESHES_PATH" \
         --anchor-hand "$ANCHOR_HAND" \
         --ref-frame "$n"
 
