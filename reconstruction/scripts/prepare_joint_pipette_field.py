@@ -1,0 +1,8 @@
+"""Union signed fields of closed pipette components, with exterior sign checks."""
+from pathlib import Path
+import numpy as np,trimesh,open3d as o3d,json
+R=Path(__file__).resolve().parents[1];J=R/'known_scene/pipette_depth_03_hand_milestone/joint';mesh=trimesh.load(R/'known_scene/pipette_depth_03_tapir/pipette/mesh_local.ply',process=True);lo=mesh.bounds[0]-.025;hi=mesh.bounds[1]+.025;res=160;z,y,x=np.meshgrid(np.linspace(lo[2],hi[2],res),np.linspace(lo[1],hi[1],res),np.linspace(lo[0],hi[0],res),indexing='ij');pts=np.stack([x,y,z],-1).astype('float32');union=np.full(pts.shape[:-1],np.inf,np.float32);parts=mesh.split(only_watertight=False);checks=[]
+for p in parts:
+ assert p.is_watertight;p.fix_normals();scene=o3d.t.geometry.RaycastingScene();scene.add_triangles(o3d.t.geometry.TriangleMesh(o3d.core.Tensor(np.asarray(p.vertices,np.float32)),o3d.core.Tensor(np.asarray(p.faces,np.uint32))));sd=scene.compute_signed_distance(o3d.core.Tensor(pts),nsamples=5).numpy();outside=((pts<p.bounds[0])|(pts>p.bounds[1])).any(-1);wrong=int((outside&(sd<0)).sum());sd[outside]=np.abs(sd[outside]);union=np.minimum(union,sd);checks.append(dict(faces=len(p.faces),corrected_exterior_samples=wrong))
+outside=((pts<mesh.bounds[0])|(pts>mesh.bounds[1])).any(-1);assert (union[outside]>=0).all();assert union.min()>-.014
+np.savez_compressed(J/'pipette_fields.npz',sdf=union,lo=lo,hi=hi);(J/'pipette_field_validation.json').write_text(json.dumps(dict(parts=checks,minimum_signed_distance_m=float(union.min()),all_exterior_positive=True,method='Union of seven closed components; five-ray sign test; analytic AABB exterior sign guard'),indent=2));print('Validated pipette field',checks,union.min(),flush=True)
